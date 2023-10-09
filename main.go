@@ -9,15 +9,15 @@ import (
 
 	"github.com/gorilla/pat"
 	"github.com/ian-kent/go-log/log"
-	"github.com/mailhog/MailHog-Server/api"
-	cfgapi "github.com/mailhog/MailHog-Server/config"
-	"github.com/mailhog/MailHog-Server/smtp"
 	"github.com/mailhog/MailHog-UI/assets"
 	cfgui "github.com/mailhog/MailHog-UI/config"
 	"github.com/mailhog/MailHog-UI/web"
-	cfgcom "github.com/mailhog/MailHog/config"
 	"github.com/mailhog/http"
 	"github.com/mailhog/mhsendmail/cmd"
+	"github.com/trewest/MailHog-Server/api"
+	cfgapi "github.com/trewest/MailHog-Server/config"
+	"github.com/trewest/MailHog-Server/smtp"
+	cfgcom "github.com/trewest/MailHog/config"
 	"golang.org/x/crypto/bcrypt"
 )
 

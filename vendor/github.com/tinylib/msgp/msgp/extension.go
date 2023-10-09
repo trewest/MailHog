@@ -1,8 +1,9 @@
 package msgp
 
 import (
-	"fmt"
+	"errors"
 	"math"
+	"strconv"
 )
 
 const (
@@ -30,7 +31,7 @@ var extensionReg = make(map[int8]func() Extension)
 //
 // For example, if you wanted to register a user-defined struct:
 //
-//  msgp.RegisterExtension(10, func() msgp.Extension { &MyExtension{} })
+//	msgp.RegisterExtension(10, func() msgp.Extension { &MyExtension{} })
 //
 // RegisterExtension will panic if you call it multiple times
 // with the same 'typ' argument, or if you use a reserved
@@ -38,10 +39,10 @@ var extensionReg = make(map[int8]func() Extension)
 func RegisterExtension(typ int8, f func() Extension) {
 	switch typ {
 	case Complex64Extension, Complex128Extension, TimeExtension:
-		panic(fmt.Sprint("msgp: forbidden extension type:", typ))
+		panic(errors.New("msgp: forbidden extension type: " + strconv.Itoa(int(typ))))
 	}
 	if _, ok := extensionReg[typ]; ok {
-		panic(fmt.Sprint("msgp: RegisterExtension() called with typ", typ, "more than once"))
+		panic(errors.New("msgp: RegisterExtension() called with typ " + strconv.Itoa(int(typ)) + " more than once"))
 	}
 	extensionReg[typ] = f
 }
@@ -56,7 +57,7 @@ type ExtensionTypeError struct {
 
 // Error implements the error interface
 func (e ExtensionTypeError) Error() string {
-	return fmt.Sprintf("msgp: error decoding extension: wanted type %d; got type %d", e.Want, e.Got)
+	return "msgp: error decoding extension: wanted type " + strconv.Itoa(int(e.Want)) + "; got type " + strconv.Itoa(int(e.Got))
 }
 
 // Resumable returns 'true' for ExtensionTypeErrors
@@ -230,7 +231,7 @@ func (m *Reader) peekExtensionType() (int8, error) {
 	if err != nil {
 		return 0, err
 	}
-	spec := sizes[p[0]]
+	spec := getBytespec(p[0])
 	if spec.typ != ExtensionType {
 		return 0, badPrefix(ExtensionType, p[0])
 	}
@@ -248,7 +249,7 @@ func (m *Reader) peekExtensionType() (int8, error) {
 // peekExtension peeks at the extension encoding type
 // (must guarantee at least 1 byte in 'b')
 func peekExtension(b []byte) (int8, error) {
-	spec := sizes[b[0]]
+	spec := getBytespec(b[0])
 	size := spec.size
 	if spec.typ != ExtensionType {
 		return 0, badPrefix(ExtensionType, b[0])
@@ -445,26 +446,27 @@ func AppendExtension(b []byte, e Extension) ([]byte, error) {
 		o[n] = mfixext16
 		o[n+1] = byte(e.ExtensionType())
 		n += 2
-	}
-	switch {
-	case l < math.MaxUint8:
-		o, n = ensure(b, l+3)
-		o[n] = mext8
-		o[n+1] = byte(uint8(l))
-		o[n+2] = byte(e.ExtensionType())
-		n += 3
-	case l < math.MaxUint16:
-		o, n = ensure(b, l+4)
-		o[n] = mext16
-		big.PutUint16(o[n+1:], uint16(l))
-		o[n+3] = byte(e.ExtensionType())
-		n += 4
 	default:
-		o, n = ensure(b, l+6)
-		o[n] = mext32
-		big.PutUint32(o[n+1:], uint32(l))
-		o[n+5] = byte(e.ExtensionType())
-		n += 6
+		switch {
+		case l < math.MaxUint8:
+			o, n = ensure(b, l+3)
+			o[n] = mext8
+			o[n+1] = byte(uint8(l))
+			o[n+2] = byte(e.ExtensionType())
+			n += 3
+		case l < math.MaxUint16:
+			o, n = ensure(b, l+4)
+			o[n] = mext16
+			big.PutUint16(o[n+1:], uint16(l))
+			o[n+3] = byte(e.ExtensionType())
+			n += 4
+		default:
+			o, n = ensure(b, l+6)
+			o[n] = mext32
+			big.PutUint32(o[n+1:], uint32(l))
+			o[n+5] = byte(e.ExtensionType())
+			n += 6
+		}
 	}
 	return o, e.MarshalBinaryTo(o[n:])
 }
@@ -473,8 +475,8 @@ func AppendExtension(b []byte, e Extension) ([]byte, error) {
 // and returns any remaining bytes.
 // Possible errors:
 // - ErrShortBytes ('b' not long enough)
-// - ExtensionTypeErorr{} (wire type not the same as e.Type())
-// - TypeErorr{} (next object not an extension)
+// - ExtensionTypeError{} (wire type not the same as e.Type())
+// - TypeError{} (next object not an extension)
 // - InvalidPrefixError
 // - An umarshal error returned from e.UnmarshalBinary
 func ReadExtensionBytes(b []byte, e Extension) ([]byte, error) {
